@@ -1,31 +1,15 @@
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import PickingColor from './color'
 
 function Form({ saveNote, noteToEdit, cancelForm }) {
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  const [noteColor, setNoteColor] = useState('yellow')
-  const [tags, setTags] = useState('')
+  const [title, setTitle] = useState(noteToEdit?.title || '')
+  const [content, setContent] = useState(noteToEdit?.content || '')
+  const [noteColor, setNoteColor] = useState(noteToEdit?.color || 'yellow')
+  const [tags, setTags] = useState((noteToEdit?.tags || []).join(', '))
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    if (noteToEdit) {
-      setTitle(noteToEdit.title || '')
-      setContent(noteToEdit.content || '')
-      setNoteColor(noteToEdit.color || 'yellow')
-      setTags((noteToEdit.tags || []).join(', '))
-    } else {
-      setTitle('')
-      setContent('')
-      setNoteColor('yellow')
-      setTags('')
-    }
-
-    setError('')
-  }, [noteToEdit])
-
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     setError('')
 
@@ -66,7 +50,7 @@ function Form({ saveNote, noteToEdit, cancelForm }) {
       note.archived = noteToEdit.archived
     }
 
-    const saved = saveNote(note)
+    const saved = await saveNote(note)
 
     if (saved) {
       setTitle('')

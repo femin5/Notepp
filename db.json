@@ -1,0 +1,31 @@
+{
+  "notes": [
+    {
+      "id": "1",
+      "title": "Team Meeting",
+      "content": "Discuss Q1 roadmap and deadlines...",
+      "color": "purple",
+      "tags": [
+        "work"
+      ],
+      "archived": false,
+      "pinned": false,
+      "stock": 0,
+      "createdAt": "2026-02-10T10:00:00Z",
+      "updatedAt": "2026-10-31T08:22:01.968Z"
+    },
+    {
+      "title": "garden",
+      "content": "fghjkl;lkjhg",
+      "color": "green",
+      "tags": [],
+      "pinned": false,
+      "archived": false,
+      "stock": 0,
+      "createdAt": "2026-10-31T08:21:56.110Z",
+      "updatedAt": "2026-10-31T08:21:56.110Z",
+      "id": "AAN5rOzGDsU"
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
+}

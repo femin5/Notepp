@@ -1,19 +1,24 @@
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Form from './form'
 import Card from './card'
 import SearchNote from './searchNote'
+import { useNotes } from './NotesContext'
 
 function App() {
-  const [notes, setNotes] = useState(() => {
-    try {
-      const savedNotes = localStorage.getItem('notes')
-      return savedNotes ? JSON.parse(savedNotes) : []
-    } catch {
-      return []
-    }
-  })
-
+  const {
+    notes,
+    loading,
+    error,
+    toasts,
+    createNote,
+    updateNote,
+    deleteNote: removeNote,
+    toggleArchive,
+    searchNotes,
+    fetchNotes,
+    dismissToast
+  } = useNotes()
   const [showForm, setShowForm] = useState(false)
   const [noteToEdit, setNoteToEdit] = useState(null)
 
@@ -24,11 +29,7 @@ function App() {
   const [showArchived, setShowArchived] = useState(false)
   const [selectedNotes, setSelectedNotes] = useState([])
 
-  useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes))
-  }, [notes])
-
-  function saveNote(note) {
+  async function saveNote(note) {
     const title = note.title.trim()
     const content = note.content.trim()
 
@@ -55,35 +56,21 @@ function App() {
       return false
     }
 
-    const currentTime = new Date().toISOString()
-
-    if (note.id) {
-      setNotes((oldNotes) =>
-        oldNotes.map((oldNote) =>
-          oldNote.id === note.id
-            ? {
-                ...oldNote,
-                ...note,
-                title,
-                content,
-                updatedAt: currentTime
-              }
-            : oldNote
-        )
-      )
-    } else {
-      const newNote = {
-        ...note,
-        id: Date.now(),
-        title,
-        content,
-        pinned: false,
-        archived: false,
-        createdAt: currentTime,
-        updatedAt: currentTime
+    try {
+      if (note.id) {
+        await updateNote(note.id, { ...note, title, content })
+      } else {
+        await createNote({
+          ...note,
+          title,
+          content,
+          pinned: false,
+          archived: false,
+          stock: 0
+        })
       }
-
-      setNotes((oldNotes) => [newNote, ...oldNotes])
+    } catch {
+      return false
     }
 
     setShowForm(false)
@@ -97,7 +84,7 @@ function App() {
     setShowForm(true)
   }
 
-  function deleteNote(id) {
+  async function deleteNote(id) {
     const confirmed = window.confirm(
       'Are you sure you want to delete this note?'
     )
@@ -106,33 +93,29 @@ function App() {
       return
     }
 
-    setNotes((oldNotes) =>
-      oldNotes.filter((note) => note.id !== id)
-    )
-
-    setSelectedNotes((oldSelected) =>
-      oldSelected.filter((selectedId) => selectedId !== id)
-    )
+    try {
+      await removeNote(id)
+      setSelectedNotes((oldSelected) =>
+        oldSelected.filter((selectedId) => selectedId !== id)
+      )
+    } catch {
+      // The context exposes the request failure in its error state.
+    }
   }
 
   function archiveNote(id) {
-    setNotes((oldNotes) =>
-      oldNotes.map((note) =>
-        note.id === id
-          ? { ...note, archived: !note.archived }
-          : note
-      )
-    )
+    void toggleArchive(id).catch(() => {
+      // The context exposes the request failure in its error state.
+    })
   }
 
   function pinNote(id) {
-    setNotes((oldNotes) =>
-      oldNotes.map((note) =>
-        note.id === id
-          ? { ...note, pinned: !note.pinned }
-          : note
-      )
-    )
+    const note = notes.find((item) => item.id === id)
+    if (!note) return
+
+    void updateNote(id, { pinned: !note.pinned }).catch(() => {
+      // The context exposes the request failure in its error state.
+    })
   }
 
   function selectNote(id) {
@@ -156,13 +139,11 @@ function App() {
       return
     }
 
-    setNotes((oldNotes) =>
-      oldNotes.filter(
-        (note) => !selectedNotes.includes(note.id)
-      )
-    )
-
-    setSelectedNotes([])
+    Promise.all(selectedNotes.map((id) => removeNote(id)))
+      .then(() => setSelectedNotes([]))
+      .catch(() => {
+        // The context exposes the request failure in its error state.
+      })
   }
 
   function cancelForm() {
@@ -174,17 +155,10 @@ function App() {
     ...new Set(notes.flatMap((note) => note.tags || []))
   ]
 
-  let filteredNotes = notes.filter((note) => {
+  let filteredNotes = searchNotes(search).filter((note) => {
     const matchesPage = showArchived
       ? note.archived
       : !note.archived
-
-    const matchesSearch =
-      (note.title || '').toLowerCase().includes(search.toLowerCase()) ||
-      (note.content || '').toLowerCase().includes(search.toLowerCase()) ||
-      (note.tags || []).some((tag) =>
-        tag.toLowerCase().includes(search.toLowerCase())
-      )
 
     const matchesColor =
       filterColor === 'all' || note.color === filterColor
@@ -194,7 +168,6 @@ function App() {
 
     return (
       matchesPage &&
-      matchesSearch &&
       matchesColor &&
       matchesTag
     )
@@ -262,6 +235,46 @@ function App() {
             </button>
           </div>
         </header>
+
+        {loading && (
+          <div
+            className="mb-4 flex items-center gap-3 text-blue-300"
+            role="status"
+          >
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-300 border-t-transparent" />
+            Loading notes...
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-900 p-3 text-red-200" role="alert">
+            Could not sync notes: {error}
+            <button
+              type="button"
+              onClick={() => {
+                void fetchNotes().catch(() => {
+                  // The context exposes the request failure in its error state.
+                })
+              }}
+              className="ml-3 underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        <div className="fixed right-4 top-4 z-50 flex flex-col gap-2" aria-live="polite">
+          {toasts.map((toast) => (
+            <button
+              key={toast.id}
+              type="button"
+              onClick={() => dismissToast(toast.id)}
+              className="rounded-lg bg-green-700 px-4 py-3 text-left text-white shadow-lg"
+            >
+              {toast.message}
+            </button>
+          ))}
+        </div>
 
         {showForm && (
           <Form
